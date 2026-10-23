@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kirpi — Engellendi</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+    background: #7f1d1d;
+    background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%);
+    color: #fff; padding: 24px;
+  }
+  .card {
+    max-width: 560px; width: 100%; background: rgba(0,0,0,0.25);
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 18px;
+    padding: 40px 34px; text-align: center; backdrop-filter: blur(6px);
+  }
+  .shield { display: block; margin: 0 auto 6px; }
+  h1 { font-size: 26px; margin: 8px 0 6px; font-weight: 700; }
+  .reason {
+    display: inline-block; margin: 8px 0 18px; padding: 6px 14px;
+    background: rgba(255,255,255,0.12); border-radius: 999px; font-size: 14px; font-weight: 600;
+  }
+  p { font-size: 15px; line-height: 1.6; color: #fde8e8; margin: 10px 0; }
+  .url {
+    word-break: break-all; background: rgba(0,0,0,0.3); padding: 10px 14px;
+    border-radius: 10px; font-family: ui-monospace, monospace; font-size: 13px;
+    margin: 14px 0; color: #fecaca;
+  }
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin-top: 26px; }
+  button {
+    border: none; border-radius: 12px; padding: 13px 22px; font-size: 15px;
+    font-weight: 600; cursor: pointer; transition: transform .08s, opacity .15s;
+  }
+  button:active { transform: scale(.97); }
+  .back { background: #fff; color: #991b1b; }
+  .proceed { background: transparent; color: #fecaca; border: 1px solid rgba(255,255,255,0.35); }
+  .proceed:hover { opacity: .8; }
+  .foot { margin-top: 22px; font-size: 12px; color: rgba(255,255,255,0.6); }
+  .proceed.confirm { background: #fecaca; color: #7f1d1d; border-color: #fecaca; }
+  .trust { display: none; margin-top: 16px; font-size: 13px; color: #fde8e8; align-items: center; justify-content: center; gap: 8px; cursor: pointer; }
+  .trust.show { display: flex; }
+  .trust input { width: 16px; height: 16px; accent-color: #fecaca; cursor: pointer; }
+  .hint { display: none; margin-top: 10px; font-size: 12px; color: #fecaca; }
+  .hint.show { display: block; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <img class="shield" src="icons/kirpi.png" alt="" width="132" height="99">
+    <h1>Bu sayfa engellendi</h1>
+    <div class="reason" id="reason">Zararlı içerik</div>
+    <p id="desc">Kirpi bu adreste bir güvenlik tehdidi tespit etti ve sizi korumak için sayfayı durdurdu.</p>
+    <div class="url" id="url"></div>
+    <div class="btns">
+      <button class="back" id="back">← Güvenli Yere Dön</button>
+      <button class="proceed" id="proceed">Riski kabul et, yine de git</button>
+    </div>
+    <div class="hint" id="hint">Bu site gerçekten tehlikeli olabilir. Devam etmek için düğmeye tekrar bas.</div>
+    <label class="trust" id="trust"><input type="checkbox" id="trustBox"> Bu siteye her zaman güven (bir daha uyarma)</label>
+    <div class="foot">Kirpi — Güvenli Tarama tarafından korunuyorsunuz</div>
+  </div>
+<script src="warning.js"></script>
+</body>
+</html>

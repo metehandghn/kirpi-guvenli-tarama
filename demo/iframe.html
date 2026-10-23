@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head><meta charset="UTF-8"><title>Gizli iframe Testi</title></head>
+<body style="font-family:sans-serif;text-align:center;margin-top:80px">
+  <h2>Gizli iframe testi</h2>
+  <p>Bu sayfada gözle görünmeyen (display:none) bir çerçeve var.</p>
+  <p>Eklenti çalışıyorsa çerçeve DOM'dan silinir ve bildirim çıkar.</p>
+
+  <!-- TEST: zararlı listedeki adrese işaret eden gizli iframe (kaldırılmalı) -->
+  <iframe src="http://kirpi-test.example/" style="display:none;width:0;height:0;border:0"></iframe>
+  <!-- KONTROL: meşru bir siteye ait gizli iframe (kaldırılMAMALI) -->
+  <iframe src="https://example.com/" style="display:none;width:0;height:0;border:0"></iframe>
+</body>
+</html>

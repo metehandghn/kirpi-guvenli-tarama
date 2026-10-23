@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head><meta charset="UTF-8"><title>Madencilik Testi</title></head>
+<body style="font-family:sans-serif;text-align:center;margin-top:80px">
+  <h2>Madencilik scripti testi</h2>
+  <p>Aşağıda <b>miner imzalı</b> ama tamamen zararsız bir script var (gerçek kazma yapmaz).</p>
+  <p>Eklenti çalışıyorsa script kaldırılır ve bildirim çıkar.</p>
+
+  <!-- TEST: hiçbir şey kazmayan, sadece madenci imza kelimesi içeren zararsız bir script.
+       İmza, antivirüslerin bu demo dosyasını madenci sanmaması için çalışma anında parçalardan
+       oluşturulup sayfaya eklenir. Kirpi sonradan eklenen bu scripti yakalayıp kaldırmalı. -->
+  <script>
+    var imza = ["Coin", "Hive", ".Anonymous"].join("");
+    var s = document.createElement("script");
+    s.textContent = "var kirpiTestMiner = '" + imza + "';";
+    document.body.appendChild(s);
+  </script>
+</body>
+</html>

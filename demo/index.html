@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kirpi Test Merkezi</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 640px;
+    margin: 40px auto; padding: 0 20px; background:#0f172a; color:#e2e8f0; }
+  h1 { font-size: 22px; } .sub{color:#94a3b8;font-size:14px;margin-bottom:24px;}
+  a.test { display:block; padding:16px 18px; margin:10px 0; background:#1e293b;
+    border:1px solid #334155; border-radius:12px; text-decoration:none; color:#e2e8f0; }
+  a.test:hover { border-color:#3b82f6; }
+  a.test b { color:#60a5fa; } a.test span{ display:block; color:#94a3b8; font-size:13px; margin-top:4px;}
+  .note{margin-top:24px;font-size:13px;color:#64748b;line-height:1.6;}
+  code{background:#1e293b;padding:2px 6px;border-radius:5px;}
+</style>
+</head>
+<body>
+  <h1>🦔 Kirpi — Test Merkezi</h1>
+  <div class="sub">Her bağlantı eklentinin bir özelliğini zararsızca tetikler. Beklenen sonuç her kartta yazıyor.</div>
+
+  <a class="test" href="http://kirpi-test.example/">
+    <b>1) Zararlı site engelleme</b>
+    <span>Beklenen: Kırmızı "Bu sayfa engellendi" uyarı ekranı açılır (adres gerçekte var olmaz).</span>
+  </a>
+
+  <a class="test" href="phishing.html">
+    <b>2) Sahte e-Devlet sayfası tespiti</b>
+    <span>Beklenen: Sayfa "oltalama" olarak işaretlenip uyarı ekranına yönlendirilir.</span>
+  </a>
+
+  <a class="test" href="redirect.html">
+    <b>3) Otomatik yönlendirme engelleme</b>
+    <span>Beklenen: meta-refresh ile dış siteye gidiş durdurulur, uyarı gösterilir.</span>
+  </a>
+
+  <a class="test" href="miner.html">
+    <b>4) Madencilik scripti engelleme</b>
+    <span>Beklenen: Miner imzalı script kaldırılır, bildirim çıkar (gerçek kazma yok).</span>
+  </a>
+
+  <a class="test" href="iframe.html">
+    <b>5) Gizli iframe temizliği</b>
+    <span>Beklenen: Görünmez çerçeve DOM'dan silinir, bildirim çıkar.</span>
+  </a>
+
+  <div class="note">
+    Not: Bu testler <code>http://localhost</code> veya dosya üzerinden çalışmalı. Eğer dosyayı
+    doğrudan <code>file://</code> ile açıyorsan, eklenti ayrıntılarından
+    <b>"Dosya URL'lerine erişime izin ver"</b> seçeneğini aç. Sayaçları eklenti simgesine
+    (🦔) tıklayıp görebilirsin.
+  </div>
+</body>
+</html>

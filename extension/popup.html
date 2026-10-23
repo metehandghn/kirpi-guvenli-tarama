@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    width: 320px; margin: 0; font-family: -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+    background: #0f172a; color: #e2e8f0;
+  }
+  header {
+    display: flex; align-items: center; gap: 10px; padding: 16px 18px;
+    background: linear-gradient(135deg, #1e3a8a, #1e40af);
+  }
+  header .logo { display: block; border-radius: 8px; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+  header .status { font-size: 12px; color: #93c5fd; margin-top: 2px; }
+  .main { padding: 16px 18px; }
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 0; border-bottom: 1px solid rgba(255,255,255,0.07);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-row .label { font-size: 14px; }
+  .toggle-row .sub { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .switch { position: relative; width: 42px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: #475569; border-radius: 999px;
+    transition: .2s; cursor: pointer;
+  }
+  .slider:before {
+    content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .2s;
+  }
+  input:checked + .slider { background: #22c55e; }
+  input:checked + .slider:before { transform: translateX(18px); }
+  .stats {
+    margin: 16px 0 6px; padding: 14px; background: rgba(255,255,255,0.04);
+    border-radius: 12px;
+  }
+  .stats h2 { font-size: 12px; margin: 0 0 10px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }
+  .trust { margin: 10px 0 6px; padding: 12px 14px; background: rgba(255,255,255,0.04); border-radius: 12px; }
+  .trust h2 { font-size: 12px; margin: 0 0 8px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }
+  .trust[hidden] { display: none; }
+  .allow-list { margin-top: 2px; display: flex; flex-direction: column; gap: 4px; }
+  .allow-item { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #cbd5e1; }
+  .allow-item button { border: none; background: transparent; color: #64748b; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+  .allow-item button:hover { color: #fca5a5; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { text-align: center; }
+  .stat .num { font-size: 22px; font-weight: 700; color: #60a5fa; }
+  .stat .cap { font-size: 10px; color: #94a3b8; margin-top: 2px; }
+  .foot { padding: 10px 18px 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .update-btn {
+    background: #1e40af; color: #fff; border: none; border-radius: 8px;
+    padding: 7px 12px; font-size: 12px; cursor: pointer;
+  }
+  .update-btn:active { opacity: .8; }
+  .meta { font-size: 10px; color: #64748b; line-height: 1.5; }
+  .foot .meta { text-align: right; }
+  .update-btn { white-space: nowrap; flex-shrink: 0; }
+</style>
+</head>
+<body>
+  <header>
+    <img class="logo" src="icons/icon48.png" alt="" width="34" height="34">
+    <div>
+      <h1>Kirpi</h1>
+      <div class="status" id="statusText">Koruma aktif</div>
+    </div>
+  </header>
+  <div class="main">
+    <div class="toggle-row">
+      <div><div class="label">Koruma</div><div class="sub">Tüm güvenlik özellikleri</div></div>
+      <label class="switch"><input type="checkbox" id="enabled"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="label">Yönlendirme engelle</div><div class="sub">İzinsiz site değiştirmeleri</div></div>
+      <label class="switch"><input type="checkbox" id="blockRedirects"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="label">İndirme engelle</div><div class="sub">Şüpheli otomatik indirmeler</div></div>
+      <label class="switch"><input type="checkbox" id="blockDownloads"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="label">Madencilik engelle</div><div class="sub">Gizli kripto kazma scriptleri</div></div>
+      <label class="switch"><input type="checkbox" id="blockMiners"><span class="slider"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="label">Sahte sayfa tespiti</div><div class="sub">e-Devlet, banka, kargo taklitleri</div></div>
+      <label class="switch"><input type="checkbox" id="detectPhishing"><span class="slider"></span></label>
+    </div>
+
+
+    <div class="stats">
+      <h2>Engellenen Tehditler</h2>
+      <div class="grid">
+        <div class="stat"><div class="num" id="s_sites">0</div><div class="cap">Zararlı Site</div></div>
+        <div class="stat"><div class="num" id="s_phish">0</div><div class="cap">Sahte Sayfa</div></div>
+        <div class="stat"><div class="num" id="s_redir">0</div><div class="cap">Yönlendirme</div></div>
+        <div class="stat"><div class="num" id="s_down">0</div><div class="cap">İndirme</div></div>
+        <div class="stat"><div class="num" id="s_mine">0</div><div class="cap">Madencilik</div></div>
+      </div>
+    </div>
+
+    <!-- Yalnızca uyarı ekranından "her zaman güven" ile eklenen site varsa görünür -->
+    <div class="trust" id="trustBox" hidden>
+      <h2>Güvenilir Siteler</h2>
+      <div class="allow-list" id="allowList"></div>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="update-btn" id="updateBtn">Listeyi Güncelle</button>
+    <span class="meta" id="listMeta">—</span>
+  </div>
+  <div class="meta" id="feedStatus" style="padding:0 18px 14px; line-height:1.7;"></div>
+<script src="popup.js"></script>
+</body>
+</html>
