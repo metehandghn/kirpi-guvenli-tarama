@@ -37,10 +37,12 @@ Resmi Türkiye uzantıları (`gov.tr`, `edu.tr`, `k12.tr`, `bel.tr` vb.) ve bili
 
 Eklenti henüz Chrome Web Mağazası'nda yok. Geliştirici modunda kurulur:
 
-1. Bu repoyu indirin (**Code → Download ZIP**) ve ZIP'i bir klasöre çıkarın.
+1. [**Releases**](https://github.com/metehandghn/kirpi-guvenli-tarama/releases/latest) sayfasından en son **`kirpi-v….zip`** dosyasını indirin ve bir klasöre çıkarın.
 2. Chrome'da adres çubuğuna `chrome://extensions` yazın (Edge'de `edge://extensions`).
 3. Sağ üstten **Geliştirici modu**'nu açın.
-4. **Paketlenmemiş öğe yükle**'ye tıklayın ve repo içindeki **`extension`** klasörünü seçin.
+4. **Paketlenmemiş öğe yükle**'ye tıklayın ve ZIP'i çıkardığınız klasörü seçin (içinde `manifest.json` olan klasör).
+
+> Kaynak koddan kurmak isterseniz: **Code → Download ZIP** ile repoyu indirip 4. adımda repo içindeki **`extension`** klasörünü seçin.
 5. Araç çubuğunda kirpi simgesi görünür. İlk kurulumda zararlı listeler arka planda indirilir. Bu birkaç dakika sürer, bu sırada tarayıcıyı kullanmaya devam edebilirsiniz.
 
 > Klasörü kurulumdan sonra silmeyin veya taşımayın. Eklenti doğrudan o klasörden çalışır.
