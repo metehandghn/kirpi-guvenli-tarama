@@ -6,6 +6,11 @@
 // Domainler ~1024 gruba (bucket) bölünür; her grup TEK bir IDB kaydı olarak yazılır.
 // Böylece milyonlarca yazma yerine ~1024 yazma olur: güncelleme saniyeler sürer,
 // yarıda kalmaz. Arama için yalnızca ilgili küçük grup yüklenir -> hiç donma yok.
+//
+// Çift tampon: iki kova deposu vardır. Aramalar "etkin" depodan yapılır; güncelleme
+// listeyi diğer depoya sıfırdan kurar ve bitince ikisinin yeri değiştirilir. Böylece
+// kaynaklardan kaldırılan siteler listeden düşer, liste her turda aynı tavana göre
+// yeniden kurulur ve güncelleme sırasında koruma hiç boşalmaz.
 
 // --- Kaynaklar ---
 const CURATED_FEEDS = [
@@ -57,40 +62,50 @@ function bucketId(domain) {
 
 // ---------- IndexedDB ----------
 const DB_NAME = "kalkanDB";
-const STORE = "buckets";
+const STORES = ["buckets", "bucketsB"];   // çift tampon: biri etkin, diğeri güncelleme için
+const ACTIVE_KEY = "kirpiActiveStore";
 let dbPromise = null;
+let activeStore = null;
 function openDB() {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = (e) => {
       const db = e.target.result;
-      // Eski sürüm store'unu temizle, yeni kova store'u kur
-      for (const name of Array.from(db.objectStoreNames)) db.deleteObjectStore(name);
-      db.createObjectStore(STORE); // key = bucketId
+      // Sürüm 1'in eski yapısını temizle; sürüm 2'nin "buckets" deposu (mevcut liste) korunur
+      if (e.oldVersion < 2) for (const name of Array.from(db.objectStoreNames)) db.deleteObjectStore(name);
+      for (const name of STORES) if (!db.objectStoreNames.contains(name)) db.createObjectStore(name); // key = bucketId
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
   return dbPromise;
 }
-function idbGet(db, key) {
+async function getActiveStore() {
+  if (activeStore) return activeStore;
+  const r = await chrome.storage.local.get(ACTIVE_KEY);
+  activeStore = STORES.includes(r[ACTIVE_KEY]) ? r[ACTIVE_KEY] : STORES[0];
+  return activeStore;
+}
+const otherStore = (name) => STORES.find(s => s !== name);
+
+function idbGet(db, store, key) {
   return new Promise((resolve) => {
-    try { const r = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+    try { const r = db.transaction(store, "readonly").objectStore(store).get(key);
       r.onsuccess = () => resolve(r.result); r.onerror = () => resolve(undefined);
     } catch (e) { resolve(undefined); }
   });
 }
-function idbPut(db, key, val) {
+function idbPut(db, store, key, val) {
   return new Promise((resolve) => {
-    try { const tx = db.transaction(STORE, "readwrite"); tx.objectStore(STORE).put(val, key);
+    try { const tx = db.transaction(store, "readwrite"); tx.objectStore(store).put(val, key);
       tx.oncomplete = () => resolve(true); tx.onerror = () => resolve(false); tx.onabort = () => resolve(false);
     } catch (e) { resolve(false); }
   });
 }
-function idbClear(db) {
+function idbClear(db, store) {
   return new Promise((resolve) => {
-    try { const tx = db.transaction(STORE, "readwrite"); tx.objectStore(STORE).clear();
+    try { const tx = db.transaction(store, "readwrite"); tx.objectStore(store).clear();
       tx.oncomplete = () => resolve(true); tx.onerror = () => resolve(false);
     } catch (e) { resolve(false); }
   });
@@ -118,7 +133,7 @@ function parseFeedLines(text) {
 // ---------- Arama ----------
 async function getBucket(db, id) {
   if (bucketCache.has(id)) return bucketCache.get(id);
-  const obj = (await idbGet(db, id)) || null;
+  const obj = (await idbGet(db, await getActiveStore(), id)) || null;
   if (bucketCache.size >= BUCKET_CACHE_MAX) bucketCache.clear();
   bucketCache.set(id, obj);
   return obj;
@@ -197,15 +212,13 @@ function stopKeepAlive() { if (keepAliveTimer) { clearInterval(keepAliveTimer); 
 async function loadState() { return (await chrome.storage.local.get(STATE_KEY))[STATE_KEY] || null; }
 async function saveState(st) { await chrome.storage.local.set({ [STATE_KEY]: st }); }
 
+// Güncelleme sürerken yalnızca kaynak durumu gösterilir; kayıt sayısı ve tarih,
+// yeni liste etkinleştiğinde (tur sonunda) değişir.
 async function publish(st) {
-  await chrome.storage.local.set({
-    kalkanCount: (st.baseCount || 0) + (st.newAdds || 0),
-    kalkanLastUpdate: Date.now(),
-    kalkanFeedStatus: st.status
-  });
+  await chrome.storage.local.set({ kalkanFeedStatus: st.status });
 }
 
-// Domainleri IDB kovalarına birleştir; yeni eklenen benzersiz sayıyı döndür
+// Domainleri hedef depodaki kovalara ekle; yeni eklenen benzersiz sayıyı döndür
 // Uzun işlerde tarayıcıya nefes aldır: işlemci tek seferde uzun süre tutulmasın
 const yieldCPU = () => sleep(8);
 
@@ -222,7 +235,7 @@ async function parseFeedLinesAsync(text) {
   return out;
 }
 
-async function mergeDomains(db, hosts, limit) {
+async function mergeDomains(db, store, hosts, limit) {
   const groups = new Map();
   let n = 0;
   for (const d of hosts) {
@@ -234,20 +247,19 @@ async function mergeDomains(db, hosts, limit) {
   }
   let added = 0, k = 0;
   for (const [id, arr] of groups) {
-    const obj = (await idbGet(db, id)) || {};
+    const obj = (await idbGet(db, store, id)) || {};
     let changed = false;
     for (const d of arr) if (!obj[d]) { obj[d] = 1; added++; changed = true; }
-    if (changed) await idbPut(db, id, obj);
+    if (changed) await idbPut(db, store, id, obj);
     if (++k % 16 === 0) await yieldCPU();
   }
-  bucketCache.clear();
   return { processed: n, added };
 }
 
-async function countAll(db) {
+async function countAll(db, store) {
   let total = 0;
   for (let id = 0; id < BUCKETS; id++) {
-    const obj = await idbGet(db, id);
+    const obj = await idbGet(db, store, id);
     if (obj) total += Object.keys(obj).length;
     if (id % 64 === 63) await yieldCPU();
   }
@@ -259,6 +271,13 @@ function errInfo(e) { return (e && e.name === "AbortError") ? "zaman aşımı" :
 // Tek bir adımı çalıştır, durumu güncelle
 async function doStep(st) {
   const db = await openDB();
+  const T = st.target;
+
+  if (st.step === "prepare") {           // hedef depoyu boşalt (önceki yarım kalmış turdan kalanlar)
+    await idbClear(db, T);
+    st.step = "curated"; st.feedIdx = 0;
+    return;
+  }
 
   if (st.step === "curated") {
     const feed = CURATED_FEEDS[st.feedIdx];
@@ -267,7 +286,7 @@ async function doStep(st) {
       const res = await fetchRetry(feed.url, 25000, 3);
       if (!res.ok) st.status.push({ id: feed.id, ok: false, info: "HTTP " + res.status });
       else {
-        const r = await mergeDomains(db, await parseFeedLinesAsync(await res.text()), null);
+        const r = await mergeDomains(db, T, await parseFeedLinesAsync(await res.text()), null);
         st.newAdds += r.added;
         st.status.push({ id: feed.id, ok: true, added: r.processed });
       }
@@ -283,7 +302,7 @@ async function doStep(st) {
       if (!st.usomPageCount) {
         const first = await usomPage(1);
         st.usomPageCount = Math.min(first.pageCount || 1, USOM_MAX_PAGES);
-        const r = await mergeDomains(db, usomHosts(first.models), null);
+        const r = await mergeDomains(db, T, usomHosts(first.models), null);
         st.newAdds += r.added; us.added += r.processed; us.ok = true;
         st.usomPage = 2;
         return;
@@ -296,7 +315,7 @@ async function doStep(st) {
         const results = await Promise.allSettled(pages.map(usomPage));
         let hosts = [];
         for (const r of results) if (r.status === "fulfilled") hosts = hosts.concat(usomHosts(r.value.models));
-        const m = await mergeDomains(db, hosts, null);
+        const m = await mergeDomains(db, T, hosts, null);
         st.newAdds += m.added; us.added += m.processed; us.ok = true;
       }
       st.usomPage = stepEnd + 1;
@@ -312,7 +331,7 @@ async function doStep(st) {
   if (st.step === "bulk") {
     const feed = BULK_FEEDS[st.feedIdx];
     if (!feed) { st.step = "done"; return; }
-    const current = (st.baseCount || 0) + st.newAdds;
+    const current = st.newAdds;          // bu turda kurulan listenin büyüklüğü
     const remainingFeeds = BULK_FEEDS.length - st.feedIdx;
     const limit = Math.max(0, Math.floor((HARD_CEILING - current) / remainingFeeds));
     if (limit === 0) st.status.push({ id: feed.id, ok: false, info: "tavan dolu" });
@@ -321,7 +340,7 @@ async function doStep(st) {
         const res = await fetchRetry(feed.url, 30000, 3);
         if (!res.ok) st.status.push({ id: feed.id, ok: false, info: "HTTP " + res.status });
         else {
-          const r = await mergeDomains(db, await parseFeedLinesAsync(await res.text()), limit);
+          const r = await mergeDomains(db, T, await parseFeedLinesAsync(await res.text()), limit);
           st.newAdds += r.added;
           st.status.push({ id: feed.id, ok: true, added: r.processed });
         }
@@ -332,12 +351,22 @@ async function doStep(st) {
   }
 
   if (st.step === "done") {
-    const total = await countAll(db);
-    st.baseCount = total; st.newAdds = 0;
+    const total = await countAll(db, T);
+    // Yeni liste, öncekinin en az yarısı kadarsa etkinleştirilir. İnternet kesikken ya da
+    // kaynakların çoğu hata verdiğinde eksik liste yüzünden koruma zayıflamasın.
+    const healthy = total > 0 && total >= (st.prevCount || 0) * 0.5;
+    if (healthy) {
+      await chrome.storage.local.set({ [ACTIVE_KEY]: T });
+      activeStore = T; bucketCache.clear();
+      await idbClear(db, otherStore(T));  // eski listeyi diskten sil
+      st.finishedAt = Date.now();
+      await chrome.storage.local.set({ kalkanCount: total, kalkanLastUpdate: st.finishedAt, kalkanLastComplete: st.finishedAt });
+    } else {
+      await idbClear(db, T);
+      st.status.push({ id: "Liste", ok: false, info: "yeni liste eksik indi, önceki liste korunuyor" });
+    }
     st.running = false;
-    st.finishedAt = Date.now();
-    await chrome.storage.local.set({ kalkanLastComplete: st.finishedAt });
-    console.log("[Kirpi] Güncelleme tamamlandı:", total, "benzersiz domain", st.status);
+    console.log("[Kirpi] Güncelleme tamamlandı:", total, "benzersiz domain", healthy ? "(etkin)" : "(eksik, kullanılmadı)", st.status);
   }
 }
 
@@ -348,8 +377,12 @@ async function runSteps() {
   startKeepAlive();
   try {
     while (true) {
-      const st = await loadState();
+      let st = await loadState();
       if (!st || !st.running) break;
+      if (!st.target) {                     // önceki sürümden yarım kalmış tur: baştan başla
+        await saveState(await newRound());
+        continue;
+      }
 
       // Aynı adım üst üste 3 kez yarıda kaldıysa atla (sonsuz döngüye girmesin)
       const key = st.step + ":" + st.feedIdx + ":" + st.usomPage;
@@ -362,6 +395,7 @@ async function runSteps() {
         else if (feedId) st.status.push({ id: feedId, ok: false, info: "tamamlanamadı" });
         if (st.step === "usom") { st.step = "bulk"; st.feedIdx = 0; }
         else if (st.step === "curated" || st.step === "bulk") st.feedIdx++;
+        else st.running = false;            // hazırlık/bitiş adımı sürekli yarıda kalıyorsa turu bırak
         st.attempts = 0; st.attemptKey = null;
         await saveState(st); await publish(st);
         continue;
@@ -381,16 +415,22 @@ async function runSteps() {
   }
 }
 
+// Yeni tur: liste, etkin olmayan depoda sıfırdan kurulur
+async function newRound() {
+  const { kalkanCount } = await chrome.storage.local.get("kalkanCount");
+  return {
+    running: true, startedAt: Date.now(),
+    target: otherStore(await getActiveStore()),
+    step: "prepare", feedIdx: 0, usomPage: 1, usomPageCount: 0,
+    status: [], prevCount: kalkanCount || 0, newAdds: 0
+  };
+}
+
 // Yeni bir güncelleme turu başlat (zaten sürüyorsa devam ettir)
 async function updateThreatLists() {
   const st = await loadState();
   if (st && st.running) { runSteps(); return { busy: true }; }
-  const { kalkanCount } = await chrome.storage.local.get("kalkanCount");
-  await saveState({
-    running: true, startedAt: Date.now(),
-    step: "curated", feedIdx: 0, usomPage: 1, usomPageCount: 0,
-    status: [], baseCount: kalkanCount || 0, newAdds: 0
-  });
+  await saveState(await newRound());
   runSteps();
   return { started: true };
 }
@@ -598,6 +638,17 @@ async function updateIfStale() {
   if (!last || Date.now() - last > FRESH_MS) updateThreatLists();
 }
 
+// Alarmları kur. Chrome, tarayıcı kapanıp açılınca alarmları silebildiği için bu her açılışta
+// da çağrılır. Var olan alarm yeniden kurulmaz (6 saatlik sayaç her açılışta sıfırlanmasın).
+async function ensureAlarms() {
+  const want = { kalkanListUpdate: 360, kalkanResume: 1 };
+  for (const [name, period] of Object.entries(want)) {
+    let a = null;
+    try { a = await chrome.alarms.get(name); } catch (e) {}
+    if (!a) chrome.alarms.create(name, { periodInMinutes: period });
+  }
+}
+
 chrome.runtime.onInstalled.addListener(async (details) => {
   const existing = await chrome.storage.local.get(Object.keys(DEFAULTS));
   const toSet = {};
@@ -606,15 +657,14 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   // Eski sürümden kalan 3 milyonluk listeyi depodan sil (artık kullanılmıyor)
   await chrome.storage.local.remove("kalkanBlocklist");
   await installMinerRules();
-  chrome.alarms.create("kalkanListUpdate", { periodInMinutes: 360 });
-  chrome.alarms.create("kalkanResume", { periodInMinutes: 1 });
+  await ensureAlarms();
   // İlk kurulumda hemen güncelle; eklenti yenilendiğinde sadece liste eskiyse güncelle
   if (details && details.reason === "install") updateThreatLists();
   else updateIfStale();
 });
 
 chrome.runtime.onStartup.addListener(async () => {
-  chrome.alarms.create("kalkanResume", { periodInMinutes: 1 });
+  await ensureAlarms();
   installMinerRules();
   updateIfStale();
 });

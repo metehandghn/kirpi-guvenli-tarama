@@ -44,7 +44,11 @@ function startBackground({ storage, idb, fetchImpl }) {
       onMessage: on("message"), onInstalled: on("installed"), onStartup: on("startup"),
       getURL: (p) => "chrome-extension://kirpi/" + p, getPlatformInfo: (cb) => cb && cb({})
     },
-    alarms: { create() {}, onAlarm: on("alarm") },
+    alarms: {
+      create: (name, info) => { (env.alarms ||= {})[name] = info; },
+      get: async (name) => (env.alarms && env.alarms[name]) ? { name, ...env.alarms[name] } : undefined,
+      onAlarm: on("alarm")
+    },
     webNavigation: { onBeforeNavigate: on("beforeNavigate"), onCommitted: on("committed") },
     downloads: {
       onCreated: on("download"),

@@ -1,6 +1,6 @@
 {
   "name": "kirpi-guvenli-tarama",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "description": "Türkçe Chrome/Edge güvenlik eklentisi: zararlı site, sahte sayfa, yönlendirme, indirme ve madencilik koruması",
   "private": true,
   "license": "MIT",

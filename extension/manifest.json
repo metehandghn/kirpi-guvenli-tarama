@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Kirpi — Güvenli Tarama",
   "short_name": "Kirpi",
-  "version": "1.3.0",
+  "version": "1.3.2",
   "description": "Zararlı siteleri, otomatik yönlendirmeleri, gizli indirmeleri ve sahte sayfaları (e-Devlet, banka, kargo) engelleyen Türkçe güvenlik eklentisi.",
   "icons": {
     "16": "icons/icon16.png",

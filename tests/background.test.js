@@ -170,3 +170,111 @@ test("indirme geçmişindeki eski kayıtlara dokunulmaz", async () => {
   await bg.listeners.download[0]({ id: 4, url: "https://ornek.com/yeni.exe", state: "in_progress", startTime: new Date().toISOString() });
   assert.deepEqual(bg.env.dl, [["pause", 4]]);
 });
+
+// ---------- Tekrarlanan güncellemeler ----------
+
+test("ikinci güncellemede listeden çıkarılan domainler silinir, sayı şişmez", async () => {
+  const storage = {}; const idb = newIDB();
+  let round = 1;
+  const fetchImpl = (url, env) => {
+    if (url.includes("scam.txt")) return ok(round === 1 ? "eski-dolandirici.com\nkalici-dolandirici.com" : "kalici-dolandirici.com\nyeni-dolandirici.com");
+    return feeds()(url, env);
+  };
+  const bg = startBackground({ storage, idb, fetchImpl });
+  await bg.listeners.installed[0]({ reason: "install" });
+  assert.ok(await waitUntil(isDone(storage), 30000));
+  const firstCount = storage.kalkanCount;
+  const blocked = async (host) => (await bg.send({ type: "checkHost", host })).blocked;
+  assert.equal(await blocked("eski-dolandirici.com"), true);
+
+  round = 2;
+  await bg.send({ type: "forceUpdate" });
+  assert.ok(await waitUntil(isDone(storage), 30000));
+  assert.equal(await blocked("eski-dolandirici.com"), false, "kaynaktan kaldırılan site artık engellenmemeli");
+  assert.equal(await blocked("kalici-dolandirici.com"), true);
+  assert.equal(await blocked("yeni-dolandirici.com"), true);
+  assert.equal(storage.kalkanCount, firstCount, "aynı büyüklükte liste aynı sayıyı vermeli");
+});
+
+test("tekrar güncellemede büyük kaynaklar tavan yüzünden boş kalmaz", async () => {
+  const storage = {}; const idb = newIDB();
+  const big = lines("mal", 1600000);   // tavanı (1,5 milyon) aşan büyük liste
+  const fetchImpl = (url, env) => url.includes("malware.txt") ? ok(big) : feeds()(url, env);
+  const bg = startBackground({ storage, idb, fetchImpl });
+  await bg.listeners.installed[0]({ reason: "install" });
+  assert.ok(await waitUntil(isDone(storage), 120000));
+  const r1 = storage.kalkanUpdateState.status.find((s) => s.id === "Malware");
+  const c1 = storage.kalkanCount;
+
+  await bg.send({ type: "forceUpdate" });
+  assert.ok(await waitUntil(isDone(storage), 120000));
+  const r2 = storage.kalkanUpdateState.status.find((s) => s.id === "Malware");
+  assert.equal(r2.ok, true, "ikinci turda Malware 'tavan dolu' olmamalı");
+  assert.equal(r2.added, r1.added, "her turda aynı miktar alınmalı");
+  assert.equal(storage.kalkanCount, c1);
+  assert.ok(storage.kalkanCount <= 1500000, "tavan aşılmamalı");
+});
+
+test("güncelleme tamamen başarısız olursa eski liste korunur", async () => {
+  const storage = {}; const idb = newIDB();
+  let offline = false;
+  const fetchImpl = (url, env) => { if (offline) throw new TypeError("Failed to fetch"); return feeds()(url, env); };
+  const bg = startBackground({ storage, idb, fetchImpl });
+  await bg.listeners.installed[0]({ reason: "install" });
+  assert.ok(await waitUntil(isDone(storage), 30000));
+  const c1 = storage.kalkanCount;
+
+  offline = true;
+  await bg.send({ type: "forceUpdate" });
+  assert.ok(await waitUntil(isDone(storage), 60000));
+  assert.equal(storage.kalkanCount, c1, "internet yokken liste silinmemeli");
+  assert.equal((await bg.send({ type: "checkHost", host: "usom-p25-7.tr" })).blocked, true);
+});
+
+test("eski sürümden yükseltmede mevcut liste kaybolmaz", async () => {
+  const idb = newIDB();
+  // Sürüm 2 veritabanı: tek "buckets" deposu, içinde bir domain
+  await new Promise((res, rej) => {
+    const req = idb.open("kalkanDB", 2);
+    req.onupgradeneeded = (e) => e.target.result.createObjectStore("buckets");
+    req.onsuccess = () => {
+      const db = req.result; const host = "eski-liste-sitesi.com";
+      let h = 0; for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
+      const tx = db.transaction("buckets", "readwrite"); tx.objectStore("buckets").put({ [host]: 1 }, h % 1024);
+      tx.oncomplete = () => { db.close(); res(); }; tx.onerror = rej;
+    };
+    req.onerror = rej;
+  });
+  // Eski sürümün yarıda kalmış güncelleme durumu (hedef depo bilgisi yok)
+  const storage = { kalkanCount: 1, kalkanLastComplete: Date.now(),
+    kalkanUpdateState: { running: true, step: "usom", feedIdx: 0, usomPage: 5, status: [], baseCount: 1, newAdds: 0 } };
+  const bg = startBackground({ storage, idb, fetchImpl: feeds() });
+  assert.equal((await bg.send({ type: "checkHost", host: "eski-liste-sitesi.com" })).blocked, true, "yükseltmeden sonra eski liste çalışmalı");
+  bg.listeners.alarm[0]({ name: "kalkanResume" });
+  assert.ok(await waitUntil(isDone(storage), 30000), "yarım kalan eski tur yeni yöntemle baştan tamamlanmalı");
+  assert.equal(storage.kalkanCount, 130402);
+  assert.equal((await bg.send({ type: "checkHost", host: "usom-p25-7.tr" })).blocked, true);
+});
+
+test("tarayıcı yeniden açılınca 6 saatlik otomatik güncelleme alarmı geri kurulur", async () => {
+  // Chrome, tarayıcı kapanıp açılınca alarmları silebiliyor; açılışta yeniden kurulmalı
+  const storage = { kalkanLastComplete: Date.now() };
+  const bg = startBackground({ storage, idb: newIDB(), fetchImpl: feeds() });
+  bg.env.alarms = {};
+  await bg.listeners.startup[0]();
+  await sleep(50);
+  assert.equal(bg.env.alarms.kalkanListUpdate && bg.env.alarms.kalkanListUpdate.periodInMinutes, 360, "otomatik güncelleme alarmı olmalı");
+  assert.equal(bg.env.alarms.kalkanResume && bg.env.alarms.kalkanResume.periodInMinutes, 1);
+});
+
+test("otomatik güncelleme alarmı çalınca liste yenilenir", async () => {
+  const storage = {}; const idb = newIDB();
+  const bg = startBackground({ storage, idb, fetchImpl: feeds() });
+  await bg.listeners.installed[0]({ reason: "install" });
+  assert.ok(await waitUntil(isDone(storage), 30000));
+  const first = storage.kalkanLastComplete;
+  await sleep(20);
+  bg.listeners.alarm[0]({ name: "kalkanListUpdate" });
+  assert.ok(await waitUntil(async () => storage.kalkanLastComplete > first && !storage.kalkanUpdateState.running, 30000), "alarmla yeni tur tamamlanmalı");
+  assert.equal(storage.kalkanCount, 130402);
+});

@@ -64,3 +64,38 @@ test("normal ödeme sayfası ve resmi kurum sayfası dolandırıcılık sayılma
   const gib = `<html><head><title>Vergi iadesi başvurusu</title></head><body><p>Vergi iadesi başvurunuzu buradan yapabilirsiniz.</p>${loginForm()}</body></html>`;
   assert.deepEqual(await kinds(gib, "https://ivd.gib.gov.tr/"), []);
 });
+
+test("giriş formunu sonradan JavaScript ile çizen sahte sayfa da yakalanır", async () => {
+  const html = `<html><head><title>Yükleniyor</title></head><body><div id="app">Yükleniyor...</div></body></html>`;
+  const page = runContent(html, "https://ziraat-sube-giris.top/");
+  await sleep(400);
+  assert.deepEqual(page.reports.map((r) => r.kind), [], "form yokken uyarı olmamalı");
+  page.document.title = "Ziraat Bankası İnternet Şubesi";
+  page.document.getElementById("app").innerHTML = `<h1>Ziraat Bankası</h1><form><input name="musteri" placeholder="Müşteri No"><input type="password" name="sifre"></form>`;
+  await sleep(700);
+  assert.deepEqual(page.reports.map((r) => r.kind), ["phishing"]);
+});
+
+test("aynı sayfa için uyarı bir kez gönderilir", async () => {
+  const page = runContent(`<html><head><title>e-Devlet Kapısı</title></head><body>${loginForm()}</body></html>`, "https://edevlet-giris.xyz/");
+  await sleep(500);
+  page.document.body.insertAdjacentHTML("beforeend", loginForm());
+  await sleep(700);
+  assert.equal(page.reports.filter((r) => r.kind === "phishing").length, 1);
+});
+
+test("dolandırıcılık haberi + üye girişi kutusu olan haber sitesi uyarı vermez", async () => {
+  const nav = Array.from({ length: 40 }, (_, i) => `<a href="/haber/${i}">Haber ${i}</a>`).join(" ");
+  const html = `<html><head><title>Son Dakika: HGS ceza SMS'lerine dikkat</title></head><body><nav>${nav}</nav>
+    <article><p>Vatandaşlara "HGS ihlal" bildirimi ve "vergi iadeniz hazır" diyen sahte mesajlar gönderiliyor.</p></article>
+    <div class="uyelik"><h3>Üye Girişi</h3><form><input type="email" name="email"><input type="password" name="password"><button>Giriş</button></form></div>
+  </body></html>`;
+  assert.deepEqual(await kinds(html, "https://www.haber-sitesi.com.tr/hgs-dolandiricilik"), []);
+});
+
+test("senaryo formun içinde geçiyorsa çok bağlantılı sayfada da yakalanır", async () => {
+  const nav = Array.from({ length: 40 }, (_, i) => `<a href="/x/${i}">Bağlantı ${i}</a>`).join(" ");
+  const html = `<html><head><title>Ödeme</title></head><body><nav>${nav}</nav>
+    <form><p>Kargonuz teslim edilemedi. Teslimat ücreti ödeyin.</p><input name="kartno" placeholder="Kart Numarası"><input name="cvv" placeholder="CVV"></form></body></html>`;
+  assert.deepEqual(await kinds(html, "https://kargo-takip-odeme.com/"), ["scam"]);
+});

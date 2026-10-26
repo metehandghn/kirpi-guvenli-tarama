@@ -311,7 +311,9 @@
   ];
   const onHost = (list) => list.some(o => host === o || host.endsWith("." + o));
 
+  let phishReported = false;
   function detectPhishing() {
+    if (phishReported) return;
     // Resmi devlet/eğitim uzantısındaysa hiç kontrol etme (ÖSYM, YÖK, üniversiteler vb.)
     if (SAFE_TLDS.some(t => host.endsWith(t))) return;
     // Listedeki HERHANGİ bir markanın resmi sitesi ya da bilinen büyük bir siteyse kontrol etme
@@ -330,6 +332,7 @@
       const where = b.strict ? head : area;
       const hit = b.foldedKeys.find(k => where.includes(k));
       if (hit) {
+        phishReported = true;
         report("phishing",
           `DİKKAT: Bu sayfa "${b.name}" gibi görünüp bilgilerinizi istiyor ama resmi adres (${b.official[0]}) DEĞİL. Olası dolandırıcılık.`,
           location.href);
@@ -337,10 +340,18 @@
       }
     }
 
-    // 2) Marka olmadan da: bilinen dolandırıcılık senaryosu + kart/şifre alanı
-    const body = fold(document.title + " " + visibleText(8000));
-    const phrase = SCAM_PHRASES.find(p => body.includes(p));
+    // 2) Marka olmadan da: bilinen dolandırıcılık senaryosu + kart/şifre alanı.
+    // Senaryo formun içinde/çevresindeyse yeterli. Başlıkta ya da sayfanın başka bir yerindeyse
+    // yalnızca tek amaçlı küçük sayfalarda sayılır: haber siteleri "HGS ceza SMS'lerine dikkat"
+    // gibi haberlerin yanında üye girişi kutusu gösterebilir, bunlar çok sayıda bağlantı içerir.
+    const near = formAreaText(sensitive);
+    let phrase = SCAM_PHRASES.find(p => near.includes(p));
+    if (!phrase && document.links.length < 15) {
+      const body = fold(document.title + " " + visibleText(8000));
+      phrase = SCAM_PHRASES.find(p => body.includes(p));
+    }
     if (phrase) {
+      phishReported = true;
       report("scam",
         `DİKKAT: Bu sayfa dolandırıcıların sık kullandığı bir senaryoyla ("${phrase}") sizden ${cards.length ? "kart" : "şifre/kimlik"} bilgisi istiyor.`,
         location.href);
@@ -353,6 +364,7 @@
   let observer;
   const pending = new Set();
   let scheduled = false;
+  let formAdded = false;
   function flushPending() {
     scheduled = false;
     for (const n of pending) {
@@ -360,6 +372,8 @@
       else if (n.nodeName === "IFRAME" && isTopFrame) checkIframe(n);
     }
     pending.clear();
+    // Giriş formunu sayfa açıldıktan sonra JavaScript ile çizen sahte sayfalar için tekrar bak
+    if (formAdded && isTopFrame && settings.detectPhishing) { formAdded = false; detectPhishing(); }
   }
   function observeMutations() {
     if (observer) return;
@@ -367,9 +381,11 @@
       for (const m of muts) {
         for (const n of m.addedNodes) {
           if (n.nodeName === "SCRIPT" || n.nodeName === "IFRAME") pending.add(n);
+          else if (!formAdded && !phishReported && n.nodeType === 1 &&
+            (n.nodeName === "INPUT" || n.nodeName === "FORM" || (n.querySelector && n.querySelector("input")))) formAdded = true;
         }
       }
-      if (pending.size && !scheduled) { scheduled = true; idle(flushPending); }
+      if ((pending.size || formAdded) && !scheduled) { scheduled = true; idle(flushPending); }
     });
     try {
       observer.observe(document.documentElement, { childList: true, subtree: true });

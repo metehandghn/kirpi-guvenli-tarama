@@ -37,7 +37,7 @@ Resmi Türkiye uzantıları (`gov.tr`, `edu.tr`, `k12.tr`, `bel.tr` vb.) ve bili
 
 Eklenti henüz Chrome Web Mağazası'nda yok. Geliştirici modunda kurulur:
 
-1. [**Releases**](https://github.com/metehandghn/kirpi-guvenli-tarama/releases/latest) sayfasından en son **`kirpi-v….zip`** dosyasını indirin ve bir klasöre çıkarın.
+1. [**Releases**](https://github.com/metehandghn/kirpi-guvenli-tarama/releases/latest) sayfasından en son **`kirpi-v….zip`** dosyasını indirin, sağ tıklayıp **Tümünü ayıkla** deyin.
 2. Chrome'da adres çubuğuna `chrome://extensions` yazın (Edge'de `edge://extensions`).
 3. Sağ üstten **Geliştirici modu**'nu açın.
 4. **Paketlenmemiş öğe yükle**'ye tıklayın ve ZIP'i çıkardığınız klasörü seçin (içinde `manifest.json` olan klasör).
@@ -60,7 +60,9 @@ extension/
 
 **Liste depolama.** 1,3 milyon domain belleğe yüklenmez. Domainler bir hash ile 1024 kovaya bölünür ve her kova IndexedDB'de tek kayıt olarak saklanır. Bir adres kontrol edilirken yalnızca ilgili küçük kova okunur. Bu sayede sayfa açılışlarında gecikme veya donma olmaz.
 
-**Güncelleme.** Listeler 6 saatte bir kendiliğinden güncellenir, istenirse panelden elle de güncellenebilir. Manifest V3'te Chrome arka plan servisini uzun işlerin ortasında kapatabildiği için güncelleme küçük adımlara bölünür ve her adımdan sonra kaldığı yer kaydedilir. Servis kapanırsa dakikada bir çalışan bir alarm işi kaldığı yerden sürdürür. Aynı adım üst üste 3 kez başarısız olursa atlanır. Güncelleme sırasında liste boşalmaz, yeni kayıtlar mevcut listeye eklenir. İşlemci tek seferde uzun süre meşgul edilmez.
+**Güncelleme.** Listeler 6 saatte bir kendiliğinden güncellenir, istenirse panelden elle de güncellenebilir. Manifest V3'te Chrome arka plan servisini uzun işlerin ortasında kapatabildiği için güncelleme küçük adımlara bölünür ve her adımdan sonra kaldığı yer kaydedilir. Servis kapanırsa dakikada bir çalışan bir alarm işi kaldığı yerden sürdürür. Aynı adım üst üste 3 kez başarısız olursa atlanır. İşlemci tek seferde uzun süre meşgul edilmez.
+
+**Çift tampon.** Veritabanında iki liste deposu vardır. Kontroller etkin depodan yapılırken güncelleme yeni listeyi diğer depoda sıfırdan kurar, bitince ikisinin yeri değişir. Böylece güncelleme sırasında koruma kesilmez, kaynaklardan kaldırılan siteler listeden düşer ve her turda tavan aynı şekilde paylaştırılır. Yeni liste öncekinin yarısından küçük inerse (ör. internet kesik) kullanılmaz, eski liste korunur.
 
 **Öncelik.** Toplam kayıt sayısı 1,5 milyonla sınırlıdır. Küçük ve özenle hazırlanmış listeler ile USOM tam olarak alınır, kalan yer büyük genel listelere paylaştırılır.
 
@@ -113,7 +115,9 @@ Testlerin kapsadığı başlıca durumlar:
 - Sürekli hata veren bir kaynağın 3 denemeden sonra atlanması
 - Eklenti yenilendiğinde liste tazeyse gereksiz indirme yapılmaması
 - Alt alan adı eşleşmesi, güncelleme sırasında listenin boşalmaması
-- Sahte sitelerin yakalanması; gerçek Garanti, sahibinden, e-Devlet ve ÖSYM sayfalarında yanlış alarm olmaması
+- Tarayıcı yeniden açılınca otomatik güncelleme alarmının geri kurulması, alarm çalınca listenin yenilenmesi
+- Tekrarlanan güncellemelerde kaldırılan sitelerin düşmesi, büyük kaynakların tavan yüzünden boş kalmaması, internet yokken eski listenin korunması, eski sürümden yükseltmede listenin kaybolmaması
+- Sahte sitelerin yakalanması (giriş formunu sonradan JavaScript ile çizen sayfalar dahil); gerçek Garanti, sahibinden, e-Devlet ve ÖSYM sayfalarında yanlış alarm olmaması
 - YouTube ve Google'ın gizli çerçevelerine dokunulmaması
 - Ters çevrilmiş madenci imzalarının doğru çözülmesi ve ağ kuralının kurulması
 - Bilerek indirilen kurulum dosyalarının iptal edilmeyip kullanıcıya sorulması, zararlı siteden gelen indirmenin iptal edilmesi
